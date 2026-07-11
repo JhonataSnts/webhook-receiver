@@ -20,8 +20,11 @@
             <div class="filters">
                 <a class="chip {{ $status ? '' : 'active' }}" href="{{ route('events.index') }}">Todos</a>
                 @foreach (['received', 'queued', 'processing', 'retrying', 'processed', 'failed', 'rejected'] as $option)
-                    <a class="chip {{ $status === $option ? 'active' : '' }}" href="{{ route('events.index', ['status' => $option]) }}">{{ ucfirst($option) }}</a>
+                    <a class="chip {{ $status === $option ? 'active' : '' }}" href="{{ route('events.index', array_filter(['status' => $option, 'source' => $sourceUuid])) }}">{{ ucfirst($option) }}</a>
                 @endforeach
+                @if ($sourceUuid)
+                    <a class="chip active" href="{{ route('events.index') }}">Fonte filtrada</a>
+                @endif
             </div>
         </div>
 

@@ -142,6 +142,47 @@
             font-size: 14px;
             font-weight: 700;
         }
+        .button.primary {
+            border-color: var(--accent);
+            background: var(--accent);
+            color: #fff;
+        }
+        .form-grid {
+            display: grid;
+            gap: 16px;
+        }
+        .field label {
+            display: block;
+            margin-bottom: 7px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .field input {
+            width: 100%;
+            min-height: 42px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0 12px;
+            color: var(--text);
+            background: #fff;
+            font: inherit;
+        }
+        .field input[type="checkbox"] {
+            width: 16px;
+            min-height: 16px;
+            padding: 0;
+        }
+        .field-error {
+            margin-top: 6px;
+            color: var(--danger);
+            font-size: 13px;
+        }
+        .inline-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
         .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
         .pagination { padding: 14px 16px; border-top: 1px solid var(--line); }
         .notice {
@@ -180,6 +221,7 @@
                 <a class="brand" href="{{ route('events.index') }}">HookRelay</a>
                 <nav class="nav">
                     <a href="{{ route('events.index') }}">Eventos</a>
+                    <a href="{{ route('sources.index') }}">Fontes</a>
                     <a href="{{ url('/up') }}">Health</a>
                 </nav>
             </div>

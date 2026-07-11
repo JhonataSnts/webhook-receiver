@@ -14,10 +14,12 @@ class WebhookEventController extends Controller
     public function index(Request $request): View
     {
         $status = $request->query('status');
+        $sourceUuid = $request->query('source');
 
         $events = WebhookEvent::query()
             ->with('source')
             ->when($status, fn ($query) => $query->where('status', $status))
+            ->when($sourceUuid, fn ($query) => $query->whereHas('source', fn ($sourceQuery) => $sourceQuery->where('uuid', $sourceUuid)))
             ->latest('received_at')
             ->paginate(15)
             ->withQueryString();
@@ -31,7 +33,7 @@ class WebhookEventController extends Controller
             'rejected' => WebhookEvent::query()->where('status', 'rejected')->count(),
         ];
 
-        return view('webhook-events.index', compact('events', 'stats', 'status'));
+        return view('webhook-events.index', compact('events', 'stats', 'status', 'sourceUuid'));
     }
 
     public function show(WebhookEvent $event): View
