@@ -5,8 +5,11 @@ namespace Tests\Feature;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\WebhookEvent;
 use App\Models\WebhookSource;
+use Illuminate\Contracts\Queue\Job as QueueJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Mockery;
 use Tests\TestCase;
 
 class WebhookReceiverTest extends TestCase
@@ -170,6 +173,84 @@ class WebhookReceiverTest extends TestCase
         Queue::assertNotPushed(ProcessWebhookEvent::class);
     }
 
+    public function test_failed_delivery_is_marked_as_retrying_when_attempts_remain(): void
+    {
+        $this->travelTo(now());
+
+        Http::fake([
+            'https://consumer.test/*' => Http::response(['error' => 'temporary failure'], 500),
+        ]);
+
+        $source = WebhookSource::query()->create([
+            'name' => 'Billing Provider',
+            'slug' => 'billing-provider',
+            'signing_secret' => 'secret-value',
+            'target_url' => 'https://consumer.test/webhooks',
+        ]);
+
+        $event = $this->storedEventFor($source);
+        $attempt = $event->deliveryAttempts()->create([
+            'attempt_number' => 1,
+            'status' => 'pending',
+        ]);
+
+        $job = new ProcessWebhookEvent($event, $attempt->id);
+        $job->setJob($this->queueJobAttempting(1));
+
+        $this->expectException(\RuntimeException::class);
+
+        try {
+            $job->handle();
+        } finally {
+            $event->refresh();
+            $attempt->refresh();
+
+            $this->assertSame('retrying', $event->status);
+            $this->assertSame('failed', $attempt->status);
+            $this->assertSame(500, $attempt->response_status);
+            $this->assertSame(now()->addSeconds(60)->timestamp, $attempt->next_retry_at->timestamp);
+        }
+    }
+
+    public function test_failed_delivery_is_marked_as_final_failure_after_last_attempt(): void
+    {
+        $this->travelTo(now());
+
+        Http::fake([
+            'https://consumer.test/*' => Http::response(['error' => 'still failing'], 500),
+        ]);
+
+        $source = WebhookSource::query()->create([
+            'name' => 'Billing Provider',
+            'slug' => 'billing-provider',
+            'signing_secret' => 'secret-value',
+            'target_url' => 'https://consumer.test/webhooks',
+        ]);
+
+        $event = $this->storedEventFor($source);
+        $attempt = $event->deliveryAttempts()->create([
+            'attempt_number' => 3,
+            'status' => 'pending',
+        ]);
+
+        $job = new ProcessWebhookEvent($event, $attempt->id);
+        $job->setJob($this->queueJobAttempting(3));
+
+        $this->expectException(\RuntimeException::class);
+
+        try {
+            $job->handle();
+        } finally {
+            $event->refresh();
+            $attempt->refresh();
+
+            $this->assertSame('failed', $event->status);
+            $this->assertSame('failed', $attempt->status);
+            $this->assertSame(500, $attempt->response_status);
+            $this->assertNull($attempt->next_retry_at);
+        }
+    }
+
     private function signedPost(WebhookSource $source, string $payload, int $timestamp, string $idempotencyKey)
     {
         $signature = 'sha256='.hash_hmac('sha256', $timestamp.'.'.$payload, $source->signing_secret);
@@ -180,5 +261,28 @@ class WebhookReceiverTest extends TestCase
             'HTTP_X_HOOKRELAY_SIGNATURE' => $signature,
             'HTTP_X_HOOKRELAY_IDEMPOTENCY_KEY' => $idempotencyKey,
         ], $payload);
+    }
+
+    private function storedEventFor(WebhookSource $source): WebhookEvent
+    {
+        return WebhookEvent::query()->create([
+            'webhook_source_id' => $source->id,
+            'idempotency_key' => 'evt_123',
+            'payload_hash' => hash('sha256', '{"event":"invoice.paid"}'),
+            'signature_header' => 'sha256=test',
+            'timestamp_header' => now()->timestamp,
+            'status' => 'received',
+            'payload' => ['event' => 'invoice.paid'],
+            'headers' => [],
+            'received_at' => now(),
+        ]);
+    }
+
+    private function queueJobAttempting(int $attempts): QueueJob
+    {
+        $job = Mockery::mock(QueueJob::class);
+        $job->shouldReceive('attempts')->andReturn($attempts);
+
+        return $job;
     }
 }

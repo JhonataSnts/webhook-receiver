@@ -13,6 +13,8 @@ class ProcessWebhookEvent implements ShouldQueue
 {
     use Queueable;
 
+    private const BACKOFF_SECONDS = [60, 300, 900];
+
     public int $tries = 3;
 
     public function __construct(
@@ -24,7 +26,7 @@ class ProcessWebhookEvent implements ShouldQueue
 
     public function backoff(): array
     {
-        return [60, 300, 900];
+        return self::BACKOFF_SECONDS;
     }
 
     public function handle(): void
@@ -70,22 +72,31 @@ class ProcessWebhookEvent implements ShouldQueue
                 'processed_at' => now(),
             ]);
         } catch (Throwable $exception) {
+            $nextRetryAt = $this->nextRetryAt();
+
             $attempt?->update([
                 'status' => 'failed',
                 'error_message' => $exception->getMessage(),
                 'attempted_at' => now(),
-                'next_retry_at' => now()->addSeconds($this->backoff()[min($this->attempts() - 1, 2)]),
+                'next_retry_at' => $nextRetryAt,
             ]);
 
-            $this->event->update(['status' => 'failed']);
+            $this->event->update([
+                'status' => $nextRetryAt ? 'retrying' : 'failed',
+            ]);
 
             throw $exception;
         }
     }
 
+    public function failed(Throwable $exception): void
+    {
+        $this->event->update(['status' => 'failed']);
+    }
+
     private function resolveAttempt(): WebhookDeliveryAttempt
     {
-        if ($this->deliveryAttemptId) {
+        if ($this->deliveryAttemptId && $this->attempts() === 1) {
             return WebhookDeliveryAttempt::query()->findOrFail($this->deliveryAttemptId);
         }
 
@@ -102,5 +113,16 @@ class ProcessWebhookEvent implements ShouldQueue
             'attempt_number' => ($this->event->deliveryAttempts()->max('attempt_number') ?? 0) + 1,
             'status' => 'pending',
         ]);
+    }
+
+    private function nextRetryAt(): ?\Illuminate\Support\Carbon
+    {
+        if ($this->attempts() >= $this->tries) {
+            return null;
+        }
+
+        $backoffSeconds = self::BACKOFF_SECONDS[min($this->attempts() - 1, count(self::BACKOFF_SECONDS) - 1)];
+
+        return now()->addSeconds($backoffSeconds);
     }
 }

@@ -11,15 +11,15 @@
         <div class="stat"><span>Total</span><strong>{{ $stats['total'] }}</strong></div>
         <div class="stat"><span>Hoje</span><strong>{{ $stats['received_today'] }}</strong></div>
         <div class="stat"><span>Processados</span><strong>{{ $stats['processed'] }}</strong></div>
+        <div class="stat"><span>Retrying</span><strong>{{ $stats['retrying'] }}</strong></div>
         <div class="stat"><span>Falhos</span><strong>{{ $stats['failed'] }}</strong></div>
-        <div class="stat"><span>Rejeitados</span><strong>{{ $stats['rejected'] }}</strong></div>
     </section>
 
     <section class="panel table-wrap">
         <div class="toolbar">
             <div class="filters">
                 <a class="chip {{ $status ? '' : 'active' }}" href="{{ route('events.index') }}">Todos</a>
-                @foreach (['received', 'processing', 'processed', 'failed', 'rejected'] as $option)
+                @foreach (['received', 'queued', 'processing', 'retrying', 'processed', 'failed', 'rejected'] as $option)
                     <a class="chip {{ $status === $option ? 'active' : '' }}" href="{{ route('events.index', ['status' => $option]) }}">{{ ucfirst($option) }}</a>
                 @endforeach
             </div>

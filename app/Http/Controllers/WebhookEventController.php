@@ -26,6 +26,7 @@ class WebhookEventController extends Controller
             'total' => WebhookEvent::query()->count(),
             'received_today' => WebhookEvent::query()->whereDate('received_at', today())->count(),
             'processed' => WebhookEvent::query()->where('status', 'processed')->count(),
+            'retrying' => WebhookEvent::query()->where('status', 'retrying')->count(),
             'failed' => WebhookEvent::query()->where('status', 'failed')->count(),
             'rejected' => WebhookEvent::query()->where('status', 'rejected')->count(),
         ];

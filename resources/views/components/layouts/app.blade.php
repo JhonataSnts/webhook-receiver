@@ -109,7 +109,7 @@
         }
         .status.processed, .status.succeeded, .status.skipped { background: #e7f6ee; color: var(--success); }
         .status.failed, .status.rejected { background: #fdecec; color: var(--danger); }
-        .status.processing, .status.received, .status.pending, .status.queued { background: #fff4d6; color: var(--warning); }
+        .status.processing, .status.received, .status.pending, .status.queued, .status.retrying { background: #fff4d6; color: var(--warning); }
         .muted { color: var(--muted); }
         .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
         .grid {
