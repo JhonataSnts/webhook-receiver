@@ -109,7 +109,7 @@
         }
         .status.processed, .status.succeeded, .status.skipped { background: #e7f6ee; color: var(--success); }
         .status.failed, .status.rejected { background: #fdecec; color: var(--danger); }
-        .status.processing, .status.received, .status.pending { background: #fff4d6; color: var(--warning); }
+        .status.processing, .status.received, .status.pending, .status.queued { background: #fff4d6; color: var(--warning); }
         .muted { color: var(--muted); }
         .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
         .grid {
@@ -144,6 +144,25 @@
         }
         .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
         .pagination { padding: 14px 16px; border-top: 1px solid var(--line); }
+        .notice {
+            margin-bottom: 18px;
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            border: 1px solid var(--line);
+            background: #fff;
+        }
+        .notice.success {
+            border-color: #b7e4ca;
+            background: #ecfdf3;
+            color: var(--success);
+        }
+        .notice.error {
+            border-color: #f5c2c0;
+            background: #fff1f1;
+            color: var(--danger);
+        }
 
         @media (max-width: 820px) {
             .page-head { align-items: flex-start; flex-direction: column; }
@@ -167,6 +186,14 @@
         </header>
 
         <main class="content">
+            @if (session('status'))
+                <div class="notice success">{{ session('status') }}</div>
+            @endif
+
+            @if (session('error'))
+                <div class="notice error">{{ session('error') }}</div>
+            @endif
+
             {{ $slot }}
         </main>
     </div>

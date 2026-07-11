@@ -92,6 +92,84 @@ class WebhookReceiverTest extends TestCase
         $this->assertSame(1, WebhookEvent::query()->count());
     }
 
+    public function test_it_can_replay_a_stored_webhook_event(): void
+    {
+        Queue::fake();
+
+        $source = WebhookSource::query()->create([
+            'name' => 'Billing Provider',
+            'slug' => 'billing-provider',
+            'signing_secret' => 'secret-value',
+        ]);
+
+        $event = WebhookEvent::query()->create([
+            'webhook_source_id' => $source->id,
+            'idempotency_key' => 'evt_123',
+            'payload_hash' => hash('sha256', '{"event":"invoice.paid"}'),
+            'signature_header' => 'sha256=test',
+            'timestamp_header' => now()->timestamp,
+            'status' => 'failed',
+            'payload' => ['event' => 'invoice.paid'],
+            'headers' => [],
+            'received_at' => now(),
+        ]);
+
+        $event->deliveryAttempts()->create([
+            'attempt_number' => 1,
+            'status' => 'failed',
+            'attempted_at' => now(),
+        ]);
+
+        $response = $this->post("/events/{$event->uuid}/replay");
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('webhook_events', [
+            'id' => $event->id,
+            'status' => 'queued',
+        ]);
+
+        $this->assertDatabaseHas('webhook_delivery_attempts', [
+            'webhook_event_id' => $event->id,
+            'attempt_number' => 2,
+            'status' => 'pending',
+        ]);
+
+        Queue::assertPushed(ProcessWebhookEvent::class);
+    }
+
+    public function test_it_does_not_replay_rejected_webhook_events(): void
+    {
+        Queue::fake();
+
+        $source = WebhookSource::query()->create([
+            'name' => 'Billing Provider',
+            'slug' => 'billing-provider',
+            'signing_secret' => 'secret-value',
+        ]);
+
+        $event = WebhookEvent::query()->create([
+            'webhook_source_id' => $source->id,
+            'payload_hash' => hash('sha256', '{"event":"invoice.paid"}'),
+            'signature_header' => 'sha256=invalid',
+            'timestamp_header' => now()->timestamp,
+            'status' => 'rejected',
+            'rejection_reason' => 'invalid_signature',
+            'payload' => ['event' => 'invoice.paid'],
+            'headers' => [],
+            'received_at' => now(),
+        ]);
+
+        $response = $this->post("/events/{$event->uuid}/replay");
+
+        $response->assertRedirect();
+
+        $this->assertSame('rejected', $event->fresh()->status);
+        $this->assertSame(0, $event->deliveryAttempts()->count());
+
+        Queue::assertNotPushed(ProcessWebhookEvent::class);
+    }
+
     private function signedPost(WebhookSource $source, string $payload, int $timestamp, string $idempotencyKey)
     {
         $signature = 'sha256='.hash_hmac('sha256', $timestamp.'.'.$payload, $source->signing_secret);

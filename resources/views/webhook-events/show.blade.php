@@ -4,7 +4,15 @@
             <h1>Evento recebido</h1>
             <p class="subtitle mono">{{ $event->uuid }}</p>
         </div>
-        <a class="button" href="{{ route('events.index') }}">Voltar</a>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            @if ($event->status !== 'rejected')
+                <form method="POST" action="{{ route('events.replay', $event) }}">
+                    @csrf
+                    <button class="button" type="submit">Replay</button>
+                </form>
+            @endif
+            <a class="button" href="{{ route('events.index') }}">Voltar</a>
+        </div>
     </div>
 
     <section class="stats">
@@ -42,7 +50,7 @@
                         <th>HTTP</th>
                         <th>Erro</th>
                         <th>Tentado em</th>
-                        <th>Próximo retry</th>
+                        <th>Proximo retry</th>
                     </tr>
                 </thead>
                 <tbody>

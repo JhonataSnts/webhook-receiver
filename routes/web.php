@@ -12,4 +12,5 @@ Route::post('/webhooks/{sourceUuid}', [WebhookReceiverController::class, 'store'
     ->name('webhooks.receive');
 
 Route::get('/events', [WebhookEventController::class, 'index'])->name('events.index');
+Route::post('/events/{event:uuid}/replay', [WebhookEventController::class, 'replay'])->name('events.replay');
 Route::get('/events/{event:uuid}', [WebhookEventController::class, 'show'])->name('events.show');

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\WebhookDeliveryAttempt;
 use App\Models\WebhookEvent;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -14,7 +15,10 @@ class ProcessWebhookEvent implements ShouldQueue
 
     public int $tries = 3;
 
-    public function __construct(public WebhookEvent $event)
+    public function __construct(
+        public WebhookEvent $event,
+        public ?int $deliveryAttemptId = null,
+    )
     {
     }
 
@@ -27,10 +31,7 @@ class ProcessWebhookEvent implements ShouldQueue
     {
         $this->event->loadMissing('source');
 
-        $attempt = $this->event->deliveryAttempts()->firstOrCreate(
-            ['attempt_number' => $this->attempts()],
-            ['status' => 'pending'],
-        );
+        $attempt = $this->resolveAttempt();
 
         $this->event->update(['status' => 'processing']);
 
@@ -80,5 +81,26 @@ class ProcessWebhookEvent implements ShouldQueue
 
             throw $exception;
         }
+    }
+
+    private function resolveAttempt(): WebhookDeliveryAttempt
+    {
+        if ($this->deliveryAttemptId) {
+            return WebhookDeliveryAttempt::query()->findOrFail($this->deliveryAttemptId);
+        }
+
+        $pendingAttempt = $this->event->deliveryAttempts()
+            ->where('status', 'pending')
+            ->orderBy('attempt_number')
+            ->first();
+
+        if ($pendingAttempt) {
+            return $pendingAttempt;
+        }
+
+        return $this->event->deliveryAttempts()->create([
+            'attempt_number' => ($this->event->deliveryAttempts()->max('attempt_number') ?? 0) + 1,
+            'status' => 'pending',
+        ]);
     }
 }

@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessWebhookEvent;
 use App\Models\WebhookEvent;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class WebhookEventController extends Controller
 {
@@ -32,8 +35,36 @@ class WebhookEventController extends Controller
 
     public function show(WebhookEvent $event): View
     {
-        $event->load('source', 'deliveryAttempts');
+        $event->load([
+            'source',
+            'deliveryAttempts' => fn ($query) => $query->orderBy('attempt_number'),
+        ]);
 
         return view('webhook-events.show', compact('event'));
+    }
+
+    public function replay(WebhookEvent $event): RedirectResponse
+    {
+        if ($event->status === 'rejected') {
+            return back()->with('error', 'Eventos rejeitados por seguranca nao podem ser reprocessados.');
+        }
+
+        $attempt = DB::transaction(function () use ($event) {
+            $attempt = $event->deliveryAttempts()->create([
+                'attempt_number' => ($event->deliveryAttempts()->max('attempt_number') ?? 0) + 1,
+                'status' => 'pending',
+            ]);
+
+            $event->update([
+                'status' => 'queued',
+                'processed_at' => null,
+            ]);
+
+            return $attempt;
+        });
+
+        ProcessWebhookEvent::dispatch($event, $attempt->id);
+
+        return back()->with('status', 'Replay enfileirado com sucesso.');
     }
 }
