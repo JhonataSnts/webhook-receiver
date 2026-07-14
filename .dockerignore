@@ -1,0 +1,13 @@
+.git
+.idea
+.vscode
+node_modules
+vendor
+storage/logs/*.log
+database/database.sqlite
+.env
+.env.*
+.phpunit.cache
+.phpunit.result.cache
+npm-debug.log
+yarn-error.log

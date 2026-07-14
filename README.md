@@ -38,7 +38,7 @@ HookRelay existe para explorar essas decisões de engenharia em um projeto peque
 
 ## Stack
 
-- PHP 8.2+
+- PHP 8.4+
 - Laravel 12
 - SQLite no ambiente local
 - Laravel Queue com driver `database`
@@ -343,6 +343,60 @@ docs/openapi.yaml
 
 O arquivo descreve o endpoint publico de recebimento de webhooks, as respostas `accepted`, `duplicate` e `rejected`, os headers esperados e as rotas operacionais de eventos e fontes.
 
+## Rodando com Docker
+
+O projeto tambem pode ser executado com Docker Compose. Por padrao, o container HTTP usa a porta `8080` para evitar conflito com o Laragon na porta `80`.
+
+Suba os containers:
+
+```bash
+docker compose up -d --build
+```
+
+Instale as dependencias PHP dentro do container, se ainda nao existir `vendor`:
+
+```bash
+docker compose exec app composer install
+```
+
+Crie o `.env` e gere a chave da aplicacao, se necessario:
+
+```bash
+docker compose exec app cp .env.example .env
+docker compose exec app php artisan key:generate
+```
+
+Crie o arquivo SQLite, rode migrations e seed:
+
+```bash
+docker compose exec app touch database/database.sqlite
+docker compose exec app php artisan migrate --seed
+```
+
+Acesse:
+
+```text
+http://localhost:8080/events
+```
+
+O worker da fila roda no servico `worker`:
+
+```bash
+docker compose logs -f worker
+```
+
+Para testar o envio demo pelo Docker:
+
+```bash
+docker compose exec app php artisan hookrelay:send-demo accepted --url=http://nginx
+```
+
+Para parar:
+
+```bash
+docker compose down
+```
+
 ## Replay Manual
 
 Eventos que não foram rejeitados por segurança podem ser reprocessados manualmente pela tela de detalhe.
@@ -395,7 +449,7 @@ Os testes cobrem:
 - [x] Melhorar retry/backoff auditável.
 - [x] Adicionar gestão de fontes.
 - [x] Adicionar documentação OpenAPI.
-- [ ] Adicionar Docker Compose.
+- [x] Adicionar Docker Compose.
 - [ ] Adicionar autenticação para o painel.
 - [ ] Adicionar rotação/regeneração de signing secret.
 - [ ] Adicionar timeline visual do evento.
