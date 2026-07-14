@@ -221,6 +221,48 @@ Endpoint: /webhooks/11111111-1111-4111-8111-111111111111
 
 ## Exemplo de Requisição
 
+### Usando o comando demo
+
+Para praticar o fluxo sem depender de Postman, curl ou outro sistema externo, use o comando Artisan:
+
+```bash
+php artisan hookrelay:send-demo accepted --url=http://localhost/webhook-receiver/public
+```
+
+Esse comando simula um provedor externo enviando um webhook assinado para a fonte demo.
+
+Depois de rodar, abra:
+
+```text
+http://localhost/webhook-receiver/public/events
+```
+
+Você deve ver um novo evento no histórico.
+
+Para simular um evento duplicado:
+
+```bash
+php artisan hookrelay:send-demo duplicate --url=http://localhost/webhook-receiver/public
+```
+
+Esse cenário envia duas requisições com a mesma `X-HookRelay-Idempotency-Key`. A primeira deve ser aceita e a segunda deve retornar `duplicate`.
+
+Para simular assinatura inválida:
+
+```bash
+php artisan hookrelay:send-demo rejected --url=http://localhost/webhook-receiver/public
+```
+
+Esse cenário envia uma assinatura propositalmente incorreta. O evento deve aparecer como `rejected` no histórico.
+
+Se estiver usando `php artisan serve`, a URL normalmente será:
+
+```bash
+php artisan hookrelay:send-demo accepted --url=http://127.0.0.1:8000
+```
+
+### Usando PHP/cURL
+
 Exemplo usando PHP para gerar assinatura e enviar o webhook:
 
 ```php
