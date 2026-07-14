@@ -333,6 +333,16 @@ Se a assinatura for inválida:
 | `/sources/create` | Cadastro de nova fonte. |
 | `/sources/{uuid}` | Detalhe da fonte, endpoint, secret e eventos recentes. |
 
+## Documentação OpenAPI
+
+O contrato HTTP atual esta documentado em:
+
+```text
+docs/openapi.yaml
+```
+
+O arquivo descreve o endpoint publico de recebimento de webhooks, as respostas `accepted`, `duplicate` e `rejected`, os headers esperados e as rotas operacionais de eventos e fontes.
+
 ## Replay Manual
 
 Eventos que não foram rejeitados por segurança podem ser reprocessados manualmente pela tela de detalhe.
@@ -384,7 +394,7 @@ Os testes cobrem:
 - [x] Adicionar replay manual.
 - [x] Melhorar retry/backoff auditável.
 - [x] Adicionar gestão de fontes.
-- [ ] Adicionar documentação OpenAPI.
+- [x] Adicionar documentação OpenAPI.
 - [ ] Adicionar Docker Compose.
 - [ ] Adicionar autenticação para o painel.
 - [ ] Adicionar rotação/regeneração de signing secret.

@@ -1,0 +1,370 @@
+openapi: 3.1.0
+info:
+  title: HookRelay API
+  version: 0.1.0
+  summary: Webhook receiver idempotente com historico auditavel.
+  description: |
+    HookRelay recebe webhooks externos, valida assinatura HMAC, evita duplicidade,
+    persiste payloads e headers, processa eventos em fila, registra tentativas,
+    permite replay manual e expoe telas operacionais para fontes e eventos.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Laravel local via artisan serve
+  - url: http://localhost/webhook-receiver/public
+    description: Laragon local
+tags:
+  - name: Webhooks
+    description: Endpoint publico usado por sistemas externos.
+  - name: Events
+    description: Historico operacional dos eventos recebidos.
+  - name: Sources
+    description: Gestao de fontes de webhook.
+  - name: Health
+    description: Verificacao basica da aplicacao.
+paths:
+  /webhooks/{sourceUuid}:
+    post:
+      tags:
+        - Webhooks
+      summary: Recebe um webhook assinado.
+      description: |
+        Recebe um payload bruto, valida assinatura e timestamp, verifica idempotencia,
+        persiste o evento e agenda o processamento em fila.
+      operationId: receiveWebhook
+      parameters:
+        - $ref: '#/components/parameters/SourceUuid'
+        - $ref: '#/components/parameters/HookRelayTimestamp'
+        - $ref: '#/components/parameters/HookRelaySignature'
+        - $ref: '#/components/parameters/HookRelayIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            examples:
+              invoicePaid:
+                summary: Evento de fatura paga
+                value:
+                  event: invoice.paid
+                  id: evt_123
+                  amount: 19990
+                  currency: BRL
+      responses:
+        '202':
+          description: Webhook aceito e enfileirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAcceptedResponse'
+              examples:
+                accepted:
+                  value:
+                    status: accepted
+                    event_id: 9d77e3b2-a6b0-487c-a7c3-fc1a1717f8eb
+        '200':
+          description: Webhook duplicado. O evento original foi preservado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDuplicateResponse'
+              examples:
+                duplicate:
+                  value:
+                    status: duplicate
+                    event_id: 9d77e3b2-a6b0-487c-a7c3-fc1a1717f8eb
+        '401':
+          description: Webhook rejeitado por regra de seguranca.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookRejectedResponse'
+              examples:
+                invalidSignature:
+                  value:
+                    status: rejected
+                    reason: invalid_signature
+                    event_id: 85b4291d-fa4b-4c56-9be2-db1308e88b13
+                missingTimestamp:
+                  value:
+                    status: rejected
+                    reason: missing_timestamp
+                    event_id: 85b4291d-fa4b-4c56-9be2-db1308e88b13
+        '404':
+          description: Fonte inexistente ou inativa.
+  /events:
+    get:
+      tags:
+        - Events
+      summary: Lista eventos recebidos.
+      description: Retorna a tela HTML de historico de eventos.
+      operationId: listEvents
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EventStatus'
+          description: Filtra eventos por status.
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filtra eventos por UUID da fonte.
+      responses:
+        '200':
+          description: Tela HTML com historico de eventos.
+          content:
+            text/html:
+              schema:
+                type: string
+  /events/{eventUuid}:
+    get:
+      tags:
+        - Events
+      summary: Exibe detalhe de um evento.
+      description: Retorna a tela HTML com payload, headers e tentativas do evento.
+      operationId: showEvent
+      parameters:
+        - $ref: '#/components/parameters/EventUuid'
+      responses:
+        '200':
+          description: Tela HTML de detalhe do evento.
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Evento nao encontrado.
+  /events/{eventUuid}/replay:
+    post:
+      tags:
+        - Events
+      summary: Reprocessa manualmente um evento.
+      description: |
+        Cria uma nova tentativa de processamento para o evento e agenda o job.
+        Eventos rejeitados por seguranca nao podem ser reprocessados.
+      operationId: replayEvent
+      parameters:
+        - $ref: '#/components/parameters/EventUuid'
+      responses:
+        '302':
+          description: Redireciona de volta para a tela do evento com mensagem de sucesso ou erro.
+        '404':
+          description: Evento nao encontrado.
+  /sources:
+    get:
+      tags:
+        - Sources
+      summary: Lista fontes de webhook.
+      description: Retorna a tela HTML com fontes cadastradas.
+      operationId: listSources
+      responses:
+        '200':
+          description: Tela HTML com fontes de webhook.
+          content:
+            text/html:
+              schema:
+                type: string
+    post:
+      tags:
+        - Sources
+      summary: Cria uma fonte de webhook.
+      description: Cria uma fonte com endpoint dedicado e signing secret gerado automaticamente.
+      operationId: createSource
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreateSourceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateSourceRequest'
+      responses:
+        '302':
+          description: Redireciona para o detalhe da fonte criada.
+        '422':
+          description: Erro de validacao dos campos enviados.
+  /sources/create:
+    get:
+      tags:
+        - Sources
+      summary: Exibe formulario de criacao de fonte.
+      operationId: createSourceForm
+      responses:
+        '200':
+          description: Tela HTML com formulario de fonte.
+          content:
+            text/html:
+              schema:
+                type: string
+  /sources/{sourceUuid}:
+    get:
+      tags:
+        - Sources
+      summary: Exibe detalhe de uma fonte.
+      description: Retorna endpoint, signing secret, status e eventos recentes da fonte.
+      operationId: showSource
+      parameters:
+        - $ref: '#/components/parameters/SourceUuid'
+      responses:
+        '200':
+          description: Tela HTML de detalhe da fonte.
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Fonte nao encontrada.
+  /sources/{sourceUuid}/toggle:
+    post:
+      tags:
+        - Sources
+      summary: Ativa ou desativa uma fonte.
+      operationId: toggleSource
+      parameters:
+        - $ref: '#/components/parameters/SourceUuid'
+      responses:
+        '302':
+          description: Redireciona de volta para o detalhe da fonte.
+        '404':
+          description: Fonte nao encontrada.
+  /up:
+    get:
+      tags:
+        - Health
+      summary: Health check da aplicacao.
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Aplicacao disponivel.
+          content:
+            text/html:
+              schema:
+                type: string
+components:
+  parameters:
+    SourceUuid:
+      name: sourceUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 11111111-1111-4111-8111-111111111111
+    EventUuid:
+      name: eventUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 9d77e3b2-a6b0-487c-a7c3-fc1a1717f8eb
+    HookRelayTimestamp:
+      name: X-HookRelay-Timestamp
+      in: header
+      required: true
+      schema:
+        type: integer
+      description: Unix timestamp usado para assinatura e protecao contra replay.
+      example: 1783996369
+    HookRelaySignature:
+      name: X-HookRelay-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Assinatura HMAC SHA-256 no formato sha256={hash}.
+      example: sha256=694a13d97f40a8df28f605f51296715d6da272ff
+    HookRelayIdempotencyKey:
+      name: X-HookRelay-Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Chave usada para evitar processamento duplicado.
+      example: evt_123
+  schemas:
+    EventStatus:
+      type: string
+      enum:
+        - received
+        - queued
+        - processing
+        - retrying
+        - processed
+        - failed
+        - rejected
+    WebhookAcceptedResponse:
+      type: object
+      required:
+        - status
+        - event_id
+      properties:
+        status:
+          type: string
+          const: accepted
+        event_id:
+          type: string
+          format: uuid
+    WebhookDuplicateResponse:
+      type: object
+      required:
+        - status
+        - event_id
+      properties:
+        status:
+          type: string
+          const: duplicate
+        event_id:
+          type: string
+          format: uuid
+    WebhookRejectedResponse:
+      type: object
+      required:
+        - status
+        - reason
+        - event_id
+      properties:
+        status:
+          type: string
+          const: rejected
+        reason:
+          type: string
+          enum:
+            - missing_timestamp
+            - stale_timestamp
+            - missing_signature
+            - invalid_signature
+        event_id:
+          type: string
+          format: uuid
+    CreateSourceRequest:
+      type: object
+      required:
+        - name
+        - slug
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          example: Stripe Billing
+        slug:
+          type: string
+          maxLength: 255
+          pattern: '^[A-Za-z0-9_-]+$'
+          example: stripe-billing
+        target_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+          maxLength: 2048
+          example: https://consumer.example.com/internal-webhook
+        is_active:
+          type: boolean
+          default: true
